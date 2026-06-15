@@ -30,7 +30,7 @@ func callDeepSeek(prompt string) (string, error) {
     reqBody := deepSeekReq{
         Model: DEEPSEEK_MODEL,
         Messages: []ChatMessage{
-            {Role: "system", Content: "你是一位温和、专业的健康恢复教练，用中文回答，不长篇大论。"},
+            {Role: "system", Content: "你是一位温和、专业的健康恢复教练，用中文回答。"},
             {Role: "user", Content: prompt},
         },
         MaxTokens: 500,

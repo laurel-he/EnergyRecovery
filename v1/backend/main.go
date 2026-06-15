@@ -24,19 +24,28 @@ func main() {
     r := gin.Default()
     r.Use(corsMiddleware())
 
-    api := r.Group("/api")
+    // 无需认证的接口
+    r.POST("/api/register", register)
+    r.POST("/api/login", login)
+    r.POST("/api/visit", recordVisit) // 访问上报可选认证
+    r.GET("/api/stats", getStats)
+
+    // 需要认证的接口
+    auth := r.Group("/api")
+    auth.Use(authMiddleware())
     {
-        api.GET("/user", getUser)
-        api.POST("/user", updateUser)
-        api.GET("/tasks", getTodayTasks)
-        api.PUT("/tasks/toggle", toggleTask)
-        api.POST("/checkin", manualCheckin)
-        api.GET("/checkin/history", getCheckinHistory)
-        api.GET("/stage-progress", getStageProgress)
-        api.PUT("/stage-progress", updateStageProgress)
-        api.POST("/ai-diagnose", aiDiagnose)
-        api.POST("/visit", recordVisit)
-        api.GET("/stats", getStats)
+        auth.GET("/me", func(c *gin.Context) {
+            c.JSON(200, gin.H{"account_id": c.GetInt("account_id"), "username": c.GetString("username")})
+        })
+        auth.GET("/profile", getProfile)
+        auth.POST("/profile", updateProfile)
+        auth.GET("/tasks", getTodayTasks)
+        auth.PUT("/tasks/toggle", toggleTask)
+        auth.POST("/checkin", manualCheckin)
+        auth.GET("/checkin/history", getCheckinHistory)
+        auth.GET("/stage-progress", getStageProgress)
+        auth.PUT("/stage-progress", updateStageProgress)
+        auth.POST("/ai-diagnose", aiDiagnose)
     }
 
     r.Run(SERVER_PORT)

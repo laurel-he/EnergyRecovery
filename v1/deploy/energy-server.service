@@ -5,10 +5,10 @@ After=network.target mysql.service
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/opt/energy-recovery/backend
-ExecStart=/opt/energy-recovery/backend/energy-server
+WorkingDirectory=/opt/energyRecovery/EnergyRecovery/v1/backend
+ExecStart=/opt/energyRecovery/EnergyRecovery/v1/backend/energy-server
 Restart=always
-Environment="DB_PASS=your_mysql_password"
+Environment="DB_PASS=940918"
 
 [Install]
 WantedBy=multi-user.target

@@ -2,7 +2,7 @@ package main
 
 const (
     DB_USER   = "root"
-    DB_PASS   = "your_mysql_password"   // 修改为你的MySQL密码
+    DB_PASS   = "940918"   // 修改为你的MySQL密码
     DB_HOST   = "127.0.0.1"
     DB_PORT   = "3306"
     DB_NAME   = "energy_recovery"

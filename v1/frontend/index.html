@@ -4,181 +4,230 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>活人自救指南 · EnergyRecovery</title>
-    <!-- 此处粘贴之前的完整 CSS 样式，与之前回答一致 -->
     <style>
-        /* ... 所有CSS保持不变 ... */
+        :root { /* 与之前相同，略... */ }
+        /* 新增登录页样式 */
+        .auth-container {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            min-height: 100vh; padding: 20px; background: var(--bg);
+        }
+        .auth-card {
+            width: 100%; max-width: 360px; background: white; border-radius: 24px;
+            padding: 30px; box-shadow: var(--shadow-lg);
+        }
+        .auth-title { text-align: center; font-size: 1.5rem; font-weight: 700; margin-bottom: 20px; }
+        .auth-input {
+            width: 100%; padding: 12px; margin-bottom: 12px; border: 1.5px solid var(--border);
+            border-radius: 12px; font-size: 0.9rem; background: #FFFDF9;
+        }
+        .auth-btn {
+            width: 100%; padding: 12px; background: var(--accent); color: white;
+            border: none; border-radius: 25px; font-weight: 700; font-size: 1rem;
+            margin-top: 10px; cursor: pointer;
+        }
+        .auth-link { text-align: center; margin-top: 12px; font-size: 0.8rem; color: var(--text-muted); }
+        .auth-link a { color: var(--accent); cursor: pointer; text-decoration: underline; }
+        .hidden { display: none !important; }
     </style>
 </head>
 <body>
-<div class="app-container" id="app">
+<!-- 登录/注册界面 -->
+<div id="authSection" class="auth-container">
+    <div class="auth-card">
+        <div class="auth-title" id="authTitle">登录</div>
+        <input type="text" id="authUsername" class="auth-input" placeholder="用户名">
+        <input type="password" id="authPassword" class="auth-input" placeholder="密码">
+        <button class="auth-btn" id="authButton" onclick="handleAuth()">登录</button>
+        <div class="auth-link">
+            <span id="authToggleText">没有账号？</span>
+            <a id="authToggleLink" onclick="toggleAuthMode()">立即注册</a>
+        </div>
+        <div style="color:red;font-size:0.8rem;margin-top:8px;text-align:center;" id="authError"></div>
+    </div>
+</div>
+
+<!-- 主界面 (原 app-container) -->
+<div class="app-container hidden" id="mainApp">
     <!-- Toast -->
     <div class="toast" id="toast"></div>
-    <!-- 粒子容器 -->
-    <div class="confetti-container" id="confettiContainer"></div>
+    <div id="confettiContainer"></div>
 
-    <!-- ===== 首页 ===== -->
+    <!-- 首页 -->
     <div class="page active" id="page-home">
-        <!-- 与之前结构相同，略 -->
+        <!-- ... 与之前完全相同的结构 ... -->
     </div>
-    <!-- ===== AI诊断页 ===== -->
-    <div class="page" id="page-diagnosis">
-        <!-- ... -->
-    </div>
-    <!-- ===== 恢复路线页 ===== -->
-    <div class="page" id="page-roadmap">
-        <!-- ... -->
-    </div>
-    <!-- ===== 打卡记录页 ===== -->
-    <div class="page" id="page-checkin">
-        <!-- ... -->
-    </div>
-    <!-- ===== 我的页面 ===== -->
-    <div class="page" id="page-me">
-        <!-- ... -->
-    </div>
-
-    <!-- 底部导航 -->
-    <nav class="bottom-nav">
-        <!-- ... -->
-    </nav>
+    <!-- 诊断页、路线、打卡、我的等页面（结构完全相同，略，但ID必须保留） -->
+    <!-- 为节省篇幅，此处省略重复的 HTML 结构，请使用之前提供的完整结构，但注意删除 device_id 相关，确保所有页面元素存在 -->
 </div>
 
 <script>
-// ====================== 全局配置 ======================
+// ========== 全局状态 ==========
+let AUTH_TOKEN = localStorage.getItem('token') || '';
+let CURRENT_USER = null;
 const API_BASE = '/api';
-const DEVICE_ID = (() => {
-    let id = localStorage.getItem('device_id');
-    if (!id) {
-        id = 'dev_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-        localStorage.setItem('device_id', id);
+
+// 认证模式切换
+let isLoginMode = true;
+function toggleAuthMode() {
+    isLoginMode = !isLoginMode;
+    document.getElementById('authTitle').textContent = isLoginMode ? '登录' : '注册';
+    document.getElementById('authButton').textContent = isLoginMode ? '登录' : '注册';
+    document.getElementById('authToggleText').textContent = isLoginMode ? '没有账号？' : '已有账号？';
+    document.getElementById('authToggleLink').textContent = isLoginMode ? '立即注册' : '去登录';
+}
+
+async function handleAuth() {
+    const username = document.getElementById('authUsername').value.trim();
+    const password = document.getElementById('authPassword').value.trim();
+    const errorDiv = document.getElementById('authError');
+    errorDiv.textContent = '';
+
+    if (!username || !password) {
+        errorDiv.textContent = '请输入用户名和密码';
+        return;
     }
-    return id;
-})();
 
-// 全局状态对象（前端缓存，与服务器同步）
-let appData = {
-    userProfile: {},
-    tasks: [],
-    checkinDates: [],
-    stageProgress: {},
-};
+    const url = isLoginMode ? '/api/login' : '/api/register';
+    try {
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({username, password})
+        });
+        const data = await res.json();
+        if (data.error) {
+            errorDiv.textContent = data.error;
+            return;
+        }
+        // 保存token，显示主界面
+        AUTH_TOKEN = data.token;
+        localStorage.setItem('token', AUTH_TOKEN);
+        CURRENT_USER = {account_id: data.account_id, username: data.username};
+        document.getElementById('authSection').classList.add('hidden');
+        document.getElementById('mainApp').classList.remove('hidden');
+        initAppData();
+    } catch (e) {
+        errorDiv.textContent = '网络错误';
+    }
+}
 
-// ====================== 工具函数 ======================
+// 退出登录（可选）
+function logout() {
+    localStorage.removeItem('token');
+    AUTH_TOKEN = '';
+    CURRENT_USER = null;
+    document.getElementById('authSection').classList.remove('hidden');
+    document.getElementById('mainApp').classList.add('hidden');
+}
+
+// ========== API 封装 (带 token) ==========
+async function apiGet(path, params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    const res = await fetch(`${API_BASE}${path}?${qs}`, {
+        headers: {'Authorization': 'Bearer ' + AUTH_TOKEN}
+    });
+    return res.json();
+}
+async function apiPost(path, data = {}) {
+    const res = await fetch(`${API_BASE}${path}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + AUTH_TOKEN
+        },
+        body: JSON.stringify(data)
+    });
+    return res.json();
+}
+async function apiPut(path, data = {}) {
+    const res = await fetch(`${API_BASE}${path}`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + AUTH_TOKEN
+        },
+        body: JSON.stringify(data)
+    });
+    return res.json();
+}
+
+// ========== 工具函数 ==========
 function getTodayStr() {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
-
-function showToast(msg, type = '') {
-    const toast = document.getElementById('toast');
-    toast.textContent = msg;
-    toast.className = 'toast ' + type + ' show';
-    clearTimeout(toast._timeout);
-    toast._timeout = setTimeout(() => toast.classList.remove('show'), 2200);
+function getDateStr(date) {
+    return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
 }
-
+function showToast(msg, type='') {
+    const t = document.getElementById('toast');
+    if(!t) return;
+    t.textContent = msg;
+    t.className = 'toast '+type+' show';
+    clearTimeout(t._timeout);
+    t._timeout = setTimeout(() => t.classList.remove('show'), 2200);
+}
 function spawnConfetti() {
-    const container = document.getElementById('confettiContainer');
-    const colors = ['#E8815B','#6BAF7B','#D4A853','#7B9EC7','#9B7EC7'];
+    const c = document.getElementById('confettiContainer');
+    if(!c) return;
     for(let i=0; i<25; i++) {
-        const el = document.createElement('div');
+        let el = document.createElement('div');
         el.className='confetti';
         el.style.left = Math.random()*100+'%';
-        el.style.background = colors[Math.floor(Math.random()*colors.length)];
-        container.appendChild(el);
-        setTimeout(()=>el.remove(), 1500);
+        el.style.background = ['#E8815B','#6BAF7B','#D4A853','#7B9EC7'][Math.floor(Math.random()*4)];
+        c.appendChild(el);
+        setTimeout(() => el.remove(), 1500);
     }
 }
 
-// ====================== API 请求封装 ======================
-async function apiGet(path, params = {}) {
-    params.device_id = DEVICE_ID;
-    const qs = new URLSearchParams(params).toString();
-    const res = await fetch(`${API_BASE}${path}?${qs}`);
-    return res.json();
-}
+// ========== 主数据加载 ==========
+let appData = { userProfile:{}, tasks:[], checkinDates:[], stageProgress:{} };
 
-async function apiPost(path, data = {}) {
-    data.device_id = data.device_id || DEVICE_ID;
-    const res = await fetch(`${API_BASE}${path}`, {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify(data)
-    });
-    return res.json();
-}
-
-async function apiPut(path, data = {}) {
-    data.device_id = data.device_id || DEVICE_ID;
-    const res = await fetch(`${API_BASE}${path}`, {
-        method: 'PUT',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify(data)
-    });
-    return res.json();
-}
-
-// 上报访问
-function reportVisit() {
-    fetch('/api/visit', {
-        method: 'POST',
-        headers: {'Content-Type':'application/x-www-form-urlencoded'},
-        body: 'device_id=' + encodeURIComponent(DEVICE_ID)
-    }).catch(()=>{});
-}
-
-// ====================== 核心数据加载 ======================
 async function loadUserProfile() {
-    const data = await apiGet('/user');
-    appData.userProfile = data;
+    const p = await apiGet('/profile');
+    appData.userProfile = p;
 }
-
 async function loadTodayTasks() {
-    const today = getTodayStr();
-    const tasks = await apiGet('/tasks', { date: today });
-    appData.tasks = tasks;
+    appData.tasks = await apiGet('/tasks', { date: getTodayStr() }) || [];
 }
-
 async function loadCheckinHistory() {
-    const data = await apiGet('/checkin/history');
-    appData.checkinDates = data.dates || [];
+    const d = await apiGet('/checkin/history');
+    appData.checkinDates = d.dates || [];
 }
-
 async function loadStageProgress() {
-    const data = await apiGet('/stage-progress');
-    appData.stageProgress = data.stage_progress || {};
+    const d = await apiGet('/stage-progress');
+    appData.stageProgress = d.stage_progress || {};
+}
+function calcStreak() {
+    const today = getTodayStr();
+    const dates = new Set(appData.checkinDates);
+    let streak = 0;
+    let d = new Date(today);
+    if (!dates.has(today)) d.setDate(d.getDate() - 1);
+    while (dates.has(getDateStr(d))) {
+        streak++;
+        d.setDate(d.getDate() - 1);
+    }
+    appData.userProfile.streakDays = streak;
+    appData.userProfile.totalDays = appData.checkinDates.length;
 }
 
 async function initAppData() {
-    await Promise.all([loadUserProfile(), loadTodayTasks(), loadCheckinHistory(), loadStageProgress()]);
-    // 计算连续打卡天数等
-    calculateStreakAndTotal();
+    await loadUserProfile();
+    await loadTodayTasks();
+    await loadCheckinHistory();
+    await loadStageProgress();
+    calcStreak();
     renderHome();
     renderRoadmap();
     renderCheckin();
     renderMe();
 }
 
-// 简单计算连续打卡天数（基于 appData.checkinDates 和今日）
-function calculateStreakAndTotal() {
-    const today = getTodayStr();
-    const dates = new Set(appData.checkinDates);
-    let streak = 0;
-    let d = new Date(today);
-    while (dates.has(getDateStr(d))) {
-        streak++;
-        d.setDate(d.getDate() - 1);
-    }
-    // 如果今天还没打卡，streak 可能比实际多一天，但在打卡时会处理
-    appData.userProfile.streakDays = streak;
-    appData.userProfile.totalDays = appData.checkinDates.length;
-}
-
-function getDateStr(date) {
-    return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
-}
-
-// ====================== 页面渲染（部分核心函数） ======================
+// ========== 渲染函数 ==========
+// 请完全复制之前提供的渲染函数，它们使用 appData 来更新 DOM
+// 包括 renderHome(), toggleTask(), checkAllCompleted(), renderCheckin(), manualCheckinToday(), renderRoadmap(), renderMe(), switchPage() 等
+// 注意：renderHome() 中需要消除 device_id，所有元素 ID 保持不变
 function renderHome() {
     const vs = appData.userProfile.vitality_score || 0;
     document.getElementById('vitalityNum').textContent = vs;
@@ -218,6 +267,7 @@ async function toggleTask(taskId, element) {
         element.classList.remove('completed');
     }
 }
+
 
 async function checkAllCompleted() {
     const allDone = appData.tasks.length > 0 && appData.tasks.every(t => t.completed);
@@ -266,13 +316,204 @@ async function runDiagnosis() {
     showToast('✅ 分析完成', 'warm');
 }
 
-// 其他页面渲染函数：renderRoadmap, renderCheckin, renderMe 请根据之前逻辑补全
-// 它们均基于 appData 进行展示，与之前类似，此处省略。
+// ========== AI 诊断修复：弹窗3秒后自动隐藏 ==========
+async function runDiagnosis() {
+    const height = +document.getElementById('diagHeight').value||160;
+    const weight = +document.getElementById('diagWeight').value||63;
+    const bodyFat = +document.getElementById('diagBodyFat').value||35;
+    const age = +document.getElementById('diagAge').value||30;
+    const symptoms = document.getElementById('diagSymptom').value.trim();
+    showToast('🤖 AI 分析中...', 'warm');
+    const data = await apiPost('/ai-diagnose', { height, weight, body_fat: bodyFat, age, symptoms });
+    if(data.error) { showToast(data.error); return; }
+    // 更新档案
+    await apiPost('/profile', {
+        height, weight, body_fat: bodyFat, age, symptoms,
+        diagnosis_label: 'AI动态分析',
+        vitality_score: appData.userProfile.vitality_score || 44,
+        current_stage: appData.userProfile.current_stage || 1,
+        stage_start_date: appData.userProfile.stage_start_date || getTodayStr()
+    });
+    const resultDiv = document.getElementById('diagnosisResult');
+    const content = document.getElementById('diagResultContent');
+    if(content && resultDiv) {
+        content.innerHTML = `<div style="white-space:pre-wrap;">${data.analysis}</div>`;
+        resultDiv.classList.add('show');
+        // 3秒后自动隐藏
+        setTimeout(() => {
+            resultDiv.classList.remove('show');
+        }, 3000);
+    }
+    showToast('✅ 分析完成', 'warm');
+}
 
-// ====================== 初始化 ======================
+// ========== 恢复路线现代化渲染 ==========
+function renderRoadmap() {
+    const container = document.getElementById('roadmapStages');
+    if(!container) return;
+    const stage = appData.userProfile.current_stage || 1;
+    const sp = appData.stageProgress;
+    const stages = [
+        { num:1, title:'恢复能量', icon:'🪫', days:'1-14天', goal:'不减肥，只恢复能量', tasks:['🍳 早餐蛋白','💧 喝水8杯','🌙 早睡','🚶 散步10分钟'], progress: sp[1]||0, total:14, color:'#E8815B' },
+        { num:2, title:'提高代谢', icon:'🔥', days:'15-30天', goal:'温和提升代谢', tasks:['👣 6000步','🏋️ 轻度力量','🥩 优质蛋白','🌙 早睡'], progress: sp[2]||0, total:16, color:'#D4A853' },
+        { num:3, title:'减脂阶段', icon:'💪', days:'31天起', goal:'安全减脂', tasks:['🏃 规律运动','🥗 科学饮食','📊 监测体脂','⚡ 活力>60'], progress: sp[3]||0, total:30, color:'#6BAF7B' }
+    ];
+    container.innerHTML = stages.map(s => {
+        const active = s.num === stage;
+        const completed = s.num < stage;
+        const pct = Math.round((s.progress/s.total)*100) || 0;
+        return `
+        <div class="widget-card" style="border-left: 5px solid ${s.color}; margin-bottom:16px; position:relative; opacity:${completed ? 0.7 : 1}; filter:${completed ? 'grayscale(30%)' : 'none'};">
+            <div style="position:absolute; top:-12px; right:16px; background:${active ? s.color : '#DDD4C8'}; color:white; padding:4px 12px; border-radius:20px; font-size:0.7rem; font-weight:600;">${active ? '📍 当前' : (completed ? '✅ 已完成' : '🔒 未解锁')}</div>
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+                <span style="font-size:2rem;">${s.icon}</span>
+                <div>
+                    <div style="font-weight:700; font-size:1rem;">${s.title} <span style="font-weight:400;font-size:0.8rem;color:var(--text-secondary);">${s.days}</span></div>
+                    <div style="font-size:0.8rem;color:var(--text-muted);">${s.goal}</div>
+                </div>
+            </div>
+            ${active ? `<div style="background:#F0E8DD;height:8px;border-radius:8px;margin:8px 0;"><div style="height:100%;background:${s.color};width:${pct}%;border-radius:8px;"></div></div><div style="font-size:0.7rem;text-align:right;">${s.progress}/${s.total} 天</div>` : ''}
+            <ul class="stage-tasks" style="list-style:none;padding:0;">
+                ${s.tasks.map(t=>`<li style="padding:4px 0;font-size:0.85rem;">${t}</li>`).join('')}
+            </ul>
+        </div>`;
+    }).join('');
+}
+
+// ========== 打卡函数（关联账户） ==========
+async function manualCheckinToday() {
+    const today = getTodayStr();
+    if(appData.checkinDates.includes(today)) { showToast('今天已打卡'); return; }
+    await apiPost('/checkin', { checkin_date: today });
+    appData.checkinDates.push(today);
+    calcStreak();
+    renderCheckin();
+    renderHome();
+    showToast('✅ 补签成功', 'warm');
+    spawnConfetti();
+}
+
+function renderCheckin() {
+    const big = document.getElementById('bigStreak');
+    if(big) big.textContent = appData.userProfile.streakDays || 0;
+    const grid = document.getElementById('checkinGrid');
+    if(!grid) return;
+    const today = new Date();
+    let html = '';
+    for(let i=27; i>=0; i--) {
+        const d = new Date(today);
+        d.setDate(d.getDate() - i);
+        const ds = getDateStr(d);
+        const done = appData.checkinDates.includes(ds);
+        const isToday = ds === getTodayStr();
+        html += `<div class="checkin-dot ${done?'done':''} ${isToday?'today':''}" title="${ds}">${d.getDate()}</div>`;
+    }
+    grid.innerHTML = html;
+}
+
+function renderMe() {
+    const p = appData.userProfile || {};
+    const setText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+
+    setText('profHeight', p.height || '--');
+    setText('profWeight', p.weight || '--');
+    setText('profBodyFat', p.body_fat || '--');
+    setText('profAge', p.age || '--');
+    setText('profType', p.diagnosis_label || '--');
+
+    const stageLabels = { 1: '第一阶段 · 恢复能量', 2: '第二阶段 · 提高代谢', 3: '第三阶段 · 减脂阶段' };
+    setText('profStage', stageLabels[p.current_stage] || '--');
+
+    setText('profVitality', (p.vitality_score || 0) + '/100');
+
+    const microLabels = { mild: '轻度', moderate: '中度', severe: '重度', extreme: '极重度' };
+    setText('profMicroDeath', (p.micro_death_index || 0) + ' · ' + (microLabels[p.micro_death_level] || '--'));
+
+    // 显示当前用户名
+    setText('profUsername', CURRENT_USER?.username || '');
+}
+
+function switchPage(page) {
+    // 隐藏所有页面
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    // 取消所有导航高亮
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+
+    // 显示目标页面
+    const pageEl = document.getElementById('page-' + page);
+    if (pageEl) pageEl.classList.add('active');
+
+    // 高亮对应导航项
+    const navEl = document.querySelector(`.nav-item[data-page="${page}"]`);
+    if (navEl) navEl.classList.add('active');
+
+    // 根据页面类型执行渲染
+    if (page === 'home') renderHome();
+    if (page === 'roadmap') renderRoadmap();
+    if (page === 'checkin') renderCheckin();
+    if (page === 'me') renderMe();
+}
+
+// 重置恢复路线到第一阶段
+async function resetRoadmap() {
+    appData.userProfile.current_stage = 1;
+    appData.stageProgress = {};
+    await apiPost('/profile', {
+        ...appData.userProfile,
+        current_stage: 1,
+        stage_start_date: getTodayStr()
+    });
+    // 清空后端阶段进度
+    await apiPut('/stage-progress', { stage_num: 1, days_completed: 0 });
+    await apiPut('/stage-progress', { stage_num: 2, days_completed: 0 });
+    await apiPut('/stage-progress', { stage_num: 3, days_completed: 0 });
+    renderRoadmap();
+    showToast('🔄 已重置为第一阶段');
+}
+
+// 重置所有数据（慎用）
+async function resetAllData() {
+    if (!confirm('确定要重置所有健康数据吗？')) return;
+    await apiPost('/profile', {
+        height: 0, weight: 0, body_fat: 0, age: 0, symptoms: '',
+        diagnosis_type: '', diagnosis_label: '',
+        micro_death_index: 0, micro_death_level: '',
+        vitality_score: 44,
+        current_stage: 1,
+        stage_start_date: getTodayStr()
+    });
+    // 重新加载数据
+    await initAppData();
+    showToast('🫶 已重置');
+}
+
+// 其他渲染函数 renderHome, toggleTask, checkAllCompleted 等与之前相同
+// 只需确保使用 apiPut, apiPost 并移除 device_id 参数
+// 此处省略，必须补齐
+
+// ========== 初始化 ==========
 window.addEventListener('load', () => {
-    reportVisit();
-    initAppData();
+    if (AUTH_TOKEN) {
+        // 验证 token 有效性
+        fetch('/api/me', { headers: { 'Authorization': 'Bearer ' + AUTH_TOKEN } })
+            .then(r => r.json())
+            .then(data => {
+                if (data.account_id) {
+                    CURRENT_USER = data;
+                    document.getElementById('authSection').classList.add('hidden');
+                    document.getElementById('mainApp').classList.remove('hidden');
+                    initAppData();
+                    // 上报访问
+                    fetch('/api/visit', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Authorization': 'Bearer ' + AUTH_TOKEN },
+                        body: 'account_id=' + data.account_id
+                    }).catch(()=>{});
+                } else {
+                    logout();
+                }
+            }).catch(() => logout());
+    }
 });
 </script>
 </body>
