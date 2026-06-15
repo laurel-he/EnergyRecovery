@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>活人自救指南 · EnergyRecovery</title>
+    <!-- 此处粘贴之前的完整 CSS 样式，与之前回答一致 -->
+    <style>
+        /* ... 所有CSS保持不变 ... */
+    </style>
+</head>
+<body>
+<div class="app-container" id="app">
+    <!-- Toast -->
+    <div class="toast" id="toast"></div>
+    <!-- 粒子容器 -->
+    <div class="confetti-container" id="confettiContainer"></div>
+
+    <!-- ===== 首页 ===== -->
+    <div class="page active" id="page-home">
+        <!-- 与之前结构相同，略 -->
+    </div>
+    <!-- ===== AI诊断页 ===== -->
+    <div class="page" id="page-diagnosis">
+        <!-- ... -->
+    </div>
+    <!-- ===== 恢复路线页 ===== -->
+    <div class="page" id="page-roadmap">
+        <!-- ... -->
+    </div>
+    <!-- ===== 打卡记录页 ===== -->
+    <div class="page" id="page-checkin">
+        <!-- ... -->
+    </div>
+    <!-- ===== 我的页面 ===== -->
+    <div class="page" id="page-me">
+        <!-- ... -->
+    </div>
+
+    <!-- 底部导航 -->
+    <nav class="bottom-nav">
+        <!-- ... -->
+    </nav>
+</div>
+
+<script>
+// ====================== 全局配置 ======================
+const API_BASE = '/api';
+const DEVICE_ID = (() => {
+    let id = localStorage.getItem('device_id');
+    if (!id) {
+        id = 'dev_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        localStorage.setItem('device_id', id);
+    }
+    return id;
+})();
+
+// 全局状态对象（前端缓存，与服务器同步）
+let appData = {
+    userProfile: {},
+    tasks: [],
+    checkinDates: [],
+    stageProgress: {},
+};
+
+// ====================== 工具函数 ======================
+function getTodayStr() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function showToast(msg, type = '') {
+    const toast = document.getElementById('toast');
+    toast.textContent = msg;
+    toast.className = 'toast ' + type + ' show';
+    clearTimeout(toast._timeout);
+    toast._timeout = setTimeout(() => toast.classList.remove('show'), 2200);
+}
+
+function spawnConfetti() {
+    const container = document.getElementById('confettiContainer');
+    const colors = ['#E8815B','#6BAF7B','#D4A853','#7B9EC7','#9B7EC7'];
+    for(let i=0; i<25; i++) {
+        const el = document.createElement('div');
+        el.className='confetti';
+        el.style.left = Math.random()*100+'%';
+        el.style.background = colors[Math.floor(Math.random()*colors.length)];
+        container.appendChild(el);
+        setTimeout(()=>el.remove(), 1500);
+    }
+}
+
+// ====================== API 请求封装 ======================
+async function apiGet(path, params = {}) {
+    params.device_id = DEVICE_ID;
+    const qs = new URLSearchParams(params).toString();
+    const res = await fetch(`${API_BASE}${path}?${qs}`);
+    return res.json();
+}
+
+async function apiPost(path, data = {}) {
+    data.device_id = data.device_id || DEVICE_ID;
+    const res = await fetch(`${API_BASE}${path}`, {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(data)
+    });
+    return res.json();
+}
+
+async function apiPut(path, data = {}) {
+    data.device_id = data.device_id || DEVICE_ID;
+    const res = await fetch(`${API_BASE}${path}`, {
+        method: 'PUT',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(data)
+    });
+    return res.json();
+}
+
+// 上报访问
+function reportVisit() {
+    fetch('/api/visit', {
+        method: 'POST',
+        headers: {'Content-Type':'application/x-www-form-urlencoded'},
+        body: 'device_id=' + encodeURIComponent(DEVICE_ID)
+    }).catch(()=>{});
+}
+
+// ====================== 核心数据加载 ======================
+async function loadUserProfile() {
+    const data = await apiGet('/user');
+    appData.userProfile = data;
+}
+
+async function loadTodayTasks() {
+    const today = getTodayStr();
+    const tasks = await apiGet('/tasks', { date: today });
+    appData.tasks = tasks;
+}
+
+async function loadCheckinHistory() {
+    const data = await apiGet('/checkin/history');
+    appData.checkinDates = data.dates || [];
+}
+
+async function loadStageProgress() {
+    const data = await apiGet('/stage-progress');
+    appData.stageProgress = data.stage_progress || {};
+}
+
+async function initAppData() {
+    await Promise.all([loadUserProfile(), loadTodayTasks(), loadCheckinHistory(), loadStageProgress()]);
+    // 计算连续打卡天数等
+    calculateStreakAndTotal();
+    renderHome();
+    renderRoadmap();
+    renderCheckin();
+    renderMe();
+}
+
+// 简单计算连续打卡天数（基于 appData.checkinDates 和今日）
+function calculateStreakAndTotal() {
+    const today = getTodayStr();
+    const dates = new Set(appData.checkinDates);
+    let streak = 0;
+    let d = new Date(today);
+    while (dates.has(getDateStr(d))) {
+        streak++;
+        d.setDate(d.getDate() - 1);
+    }
+    // 如果今天还没打卡，streak 可能比实际多一天，但在打卡时会处理
+    appData.userProfile.streakDays = streak;
+    appData.userProfile.totalDays = appData.checkinDates.length;
+}
+
+function getDateStr(date) {
+    return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+}
+
+// ====================== 页面渲染（部分核心函数） ======================
+function renderHome() {
+    const vs = appData.userProfile.vitality_score || 0;
+    document.getElementById('vitalityNum').textContent = vs;
+    // 更新圆环、微死指数等（逻辑与之前相同，略...）
+
+    // 渲染任务列表
+    const taskList = document.getElementById('todayTaskList');
+    const tasks = appData.tasks || [];
+    taskList.innerHTML = tasks.map(t => `
+        <div class="task-item ${t.completed?'completed':''}" onclick="toggleTask('${t.id}', this)">
+            <div class="task-check">✓</div>
+            <span class="task-icon">${t.icon||'📌'}</span>
+            <div class="task-content">
+                <div class="task-name">${t.name}</div>
+                <div class="task-hint">${t.hint||''}</div>
+            </div>
+        </div>
+    `).join('');
+}
+
+async function toggleTask(taskId, element) {
+    const task = appData.tasks.find(t => t.id === taskId);
+    if (!task) return;
+    task.completed = !task.completed;
+    await apiPut('/tasks/toggle', {
+        task_id: taskId,
+        task_date: getTodayStr(),
+        completed: task.completed
+    });
+    if (task.completed) {
+        element.classList.add('completed');
+        spawnConfetti();
+        showToast('✨ 太棒了！完成了一项！', 'warm');
+        // 检查是否全部完成
+        checkAllCompleted();
+    } else {
+        element.classList.remove('completed');
+    }
+}
+
+async function checkAllCompleted() {
+    const allDone = appData.tasks.length > 0 && appData.tasks.every(t => t.completed);
+    const today = getTodayStr();
+    if (allDone && !appData.checkinDates.includes(today)) {
+        await apiPost('/checkin', { checkin_date: today });
+        appData.checkinDates.push(today);
+        calculateStreakAndTotal();
+        renderHome();
+        spawnConfetti();
+        showToast('🎉 今日全部完成！你太厉害了！', 'warm');
+    }
+}
+
+// AI 诊断
+async function runDiagnosis() {
+    const height = parseFloat(document.getElementById('diagHeight').value) || 160;
+    const weight = parseFloat(document.getElementById('diagWeight').value) || 63;
+    const bodyFat = parseFloat(document.getElementById('diagBodyFat').value) || 35;
+    const age = parseInt(document.getElementById('diagAge').value) || 30;
+    const symptoms = document.getElementById('diagSymptom').value.trim();
+
+    showToast('🤖 AI 正在为你分析...', 'warm');
+    const data = await apiPost('/ai-diagnose', {
+        height, weight, body_fat, age, symptoms
+    });
+    if (data.error) {
+        showToast(data.error, '');
+        return;
+    }
+
+    // 更新用户档案（AI结果可后续解析，这里简单保存symptoms和诊断标签）
+    await apiPost('/user', {
+        height, weight, body_fat, age, symptoms,
+        diagnosis_label: 'AI 动态分析',
+        vitality_score: appData.userProfile.vitality_score,
+        current_stage: 1,
+        stage_start_date: getTodayStr()
+    });
+
+    // 显示结果
+    const resultDiv = document.getElementById('diagnosisResult');
+    const contentDiv = document.getElementById('diagResultContent');
+    contentDiv.innerHTML = `<div style="white-space:pre-wrap;font-size:0.85rem;line-height:1.7;">${data.analysis}</div>`;
+    resultDiv.classList.add('show');
+    showToast('✅ 分析完成', 'warm');
+}
+
+// 其他页面渲染函数：renderRoadmap, renderCheckin, renderMe 请根据之前逻辑补全
+// 它们均基于 appData 进行展示，与之前类似，此处省略。
+
+// ====================== 初始化 ======================
+window.addEventListener('load', () => {
+    reportVisit();
+    initAppData();
+});
+</script>
+</body>
+</html>

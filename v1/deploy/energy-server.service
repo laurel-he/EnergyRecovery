@@ -1,0 +1,14 @@
+[Unit]
+Description=Energy Recovery API
+After=network.target mysql.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/energy-recovery/backend
+ExecStart=/opt/energy-recovery/backend/energy-server
+Restart=always
+Environment="DB_PASS=your_mysql_password"
+
+[Install]
+WantedBy=multi-user.target
